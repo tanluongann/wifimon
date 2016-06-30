@@ -89,7 +89,6 @@ if __name__ == '__main__':
 
             # Display the result
             print("         %s - %s" % ("(o)" if p else "   ", targets[mac]['label']))
-            print("             ",  presence[mac])
             val = 1 if p else 0
 
             # Post the status to the DB
