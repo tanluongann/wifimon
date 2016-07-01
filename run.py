@@ -3,6 +3,7 @@ import time, datetime, pytz
 from influxdb import InfluxDBClient
 from scapy.all import *
 import sys
+import json
 
 from config import config
 from targets import targets
@@ -11,6 +12,7 @@ timeout = config['network']['timeout']
 interval = config['info']['interval']
 ips = config['network']['iprange']
 averaging = 7
+discovery_file = 'discovery.json'
 
 def db_write(client, data):
     try:
@@ -24,6 +26,13 @@ def db_write(client, data):
             print("       /!\ Error with DB, ", e)
             print("       /!\ Data, ", data)
 
+def gethostname(ip):
+    try:
+        hostname_r = socket.gethostbyaddr(ip)
+        hostname = hostname_r[0]
+    except socket.herror:
+        hostname = "Unknown"  
+    return hostname 
 
 if __name__ == '__main__':
 
@@ -42,12 +51,18 @@ if __name__ == '__main__':
     for t in targets:
         presence[t] = []
 
+    discovery = {}
+    try:
+        with open(discovery_file) as discovery_f:
+            discovery = json.load(discovery_f)
+    except:
+        pass
+
     # Main loop
     while 1:
 
         print("Iteration %s" % a)
         a += 1
-
 
         for mac in targets:
             if len(presence[mac]) >= averaging:
@@ -64,14 +79,17 @@ if __name__ == '__main__':
             # Parsing the ping answer
             if mac in targets:
                 if targets[mac]['hostname'] == '':
-                    try:
-                        hostname_r = socket.gethostbyaddr(ip)
-                        hostname = hostname_r[0]
-                    except socket.herror:
-                        hostname = "Unknown"
+                    hostname = gethostname(ip)
                 targets[mac]['ip'] = ip
                 presence[mac][-1] = True
                 # print("     %s %s - %s - %s " % ("(o)" if p else "   ", mac, ip, hostname))
+            else:
+                hostname = gethostname(ip)
+                discovery[mac] = {
+                    "hostname": hostname,
+                    "ip": ip
+                }
+
 
         # Generating a current unique timesamp
         ctime = datetime.datetime.fromtimestamp(time.time(), pytz.UTC)
@@ -108,6 +126,12 @@ if __name__ == '__main__':
                 }
             ]
             db_write(client, data)
+
+
+        with open(discovery_file, 'w') as f:
+            f.seek(0)
+            f.write(json.dumps(discovery))
+            f.truncate()
 
         # Waiting before repeating
         time.sleep(config['info']['interval'])
